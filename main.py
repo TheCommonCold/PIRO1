@@ -16,10 +16,11 @@ def display(checkpoint, nazwa, contour):
     ploty = []
     for i in range(rows):
         ax = fig.add_subplot(rows, columns, i + 1)
-        if len(contour[i]) > 2:
-            ax.plot(contour[i][:, 1], contour[i][:, 0], 'ro', markersize=5, linewidth=2)
+        temp = np.array(contour[i])
+        if len(temp) > 2:
+            ax.plot(temp[:,0],temp[:,1], 'ro', markersize=5, linewidth=2)
         else:
-            p0, p1 = contour[i]
+            p0, p1 = temp
             ax.plot((p0[0], p1[0]), (p0[1], p1[1]), markersize=10, linewidth=5)
         ax.set_title(nazwa)
         ploty.append(ax)
@@ -28,7 +29,7 @@ def display(checkpoint, nazwa, contour):
     return ploty
 
 
-def findBase2(img):
+def find_base2(img):
     data = canny(img, sigma=3)
     data = dilation(data)
     lines = probabilistic_hough_line(data, threshold=50, line_length=1,
@@ -42,7 +43,7 @@ def findBase2(img):
             base_line = line
     return base_line
 
-def findBase(img):
+def find_base(img):
     contours = find_contours(img, 0)
     max_distance = 0
     base_line = ()
@@ -53,6 +54,65 @@ def findBase(img):
             max_distance = distance
             base_line = [[coords[i+1][1],coords[i+1][0]],[coords[i][1],coords[i][0]]]
     return base_line
+
+def find_perpendicular(points):
+    if ((points[1][0] - points[0][0]) == 0 or (points[1][1] - points[0][1]) == 0):
+        slope = 0
+    else:
+        slope = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
+        slope = -1/slope
+    diff_X = points[1][0]- points[0][0]
+    diff_Y = points[1][1] - points[0][1]
+    pointNum = 20
+
+    interval_X = diff_X / (pointNum + 1)
+    interval_Y = diff_Y / (pointNum + 1)
+
+    point_list = []
+    lines = []
+    for i in range(1,pointNum+1):
+        point_list.append([points[0][0] + interval_X * i, points[0][1] + interval_Y*i])
+        lines.append([slope, point_list[i - 1][1] - (slope * point_list[i - 1][0])])
+    return lines, point_list
+
+
+def orientation_check(img, line, point):
+    y = math.floor(line[0] * (math.floor(point[0])+2) + line[1])
+    if y>len(img) or y<0 or math.floor(point[0])+2>len(img[0]):
+        return 0
+    if img[y][math.floor(point[0])+1] > 0:
+        return 1
+    else:
+        return 0
+
+def find_furthest_point(img, lines,points):
+    result = []
+    orientation = orientation_check(img, lines[math.floor(len(lines)/2)],points[math.floor(len(lines)/2)])
+    for n in range(len(lines)):
+        line = lines[n]
+        if orientation!=1:
+            for_range = range(math.floor(points[n][0])-1,0, -1)
+        else:
+            for_range = range(math.ceil(points[n][0])+1, len(img[0]), 1)
+        for i in for_range:
+            if orientation!=1:
+                y = math.floor(line[0]*i+line[1])
+            else:
+                y = math.ceil(line[0] * i + line[1])
+            if y>len(img) or y<0:
+                result.append([i, y])
+                break
+            if img[y][i]>0:
+                continue
+            else:
+                result.append([i, y])
+                break
+    return result
+
+def find_cut_points(img, line):
+    lines, point_list = find_perpendicular(line)
+    points = find_furthest_point(img, lines, point_list)
+    return points
 
 if __name__ == "__main__":
     how_many_in_folder = [6, 20, 20, 20, 20, 200, 20, 100]
@@ -65,14 +125,11 @@ if __name__ == "__main__":
             print(nazwa_pliku)
             data = io.imread(nazwa_pliku)
 
-            line = findBase(data)
-            checkpoint.append(data)
-            contours.append(line)
+            line = find_base(data)
 
-            line = findBase2(data)
             checkpoint.append(data)
-            contours.append(line)
-
+            points = find_cut_points(data,line)
+            contours.append(points)
 
         display(checkpoint, '', contours)
         io.show()
