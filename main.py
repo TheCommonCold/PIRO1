@@ -1,7 +1,7 @@
 from skimage import io, measure
 from matplotlib import pylab as plt
 from skimage.feature import corner_harris, canny, corner_peaks
-from skimage.transform import probabilistic_hough_line
+from skimage.transform import probabilistic_hough_line, rotate
 from skimage.morphology import erosion, dilation, closing
 from skimage.morphology import black_tophat, skeletonize, convex_hull_image
 from skimage.measure import find_contours, approximate_polygon
@@ -28,7 +28,7 @@ def display(checkpoint, nazwa, contour):
 
     return ploty
 
-#znajdywacz podstawy drugą metodą, nie istotne
+#znajdywacz podstawy drugą metodą
 def find_base2(img):
     data = canny(img, sigma=3)
     data = dilation(data)
@@ -43,7 +43,7 @@ def find_base2(img):
             base_line = line
     return base_line
 
-#znajdywacz podstawy pierwsza metodą, nie istotne
+#znajdywacz podstawy pierwsza metodą
 def find_base(img):
     contours = find_contours(img, 0)
     max_distance = 0
@@ -56,16 +56,8 @@ def find_base(img):
             base_line = [[coords[i+1][1],coords[i+1][0]],[coords[i][1],coords[i][0]]]
     return base_line
 
-#znajduje prostopadłe do prostej przechodzącej przez punkty z inputu, proste są zapisane jako a oraz b
-def find_perpendicular(points):
-    if ((points[1][0] - points[0][0]) == 0 or (points[1][1] - points[0][1]) == 0):
-        slope = 0
-    else:
-        slope = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
-        slope = -1/slope
-    #slope to a w funkcji liniowej
-
-    #to jest przygotowanko do generowania punktów interpolowanych pomiędzy tymi dwoma punktami z inputu
+#interpoluje punkty pomiędzy końcami podstawy
+def find_middle_points(points):
     pointNum = 20
     diff_X = points[1][0]- points[0][0]
     diff_Y = points[1][1] - points[0][1]
@@ -73,62 +65,48 @@ def find_perpendicular(points):
     interval_Y = diff_Y / (pointNum + 1)
 
     point_list = []
-    lines = []
-    #tu generuje punkty pomiędzy tymi punktami z inputu (czyli punkty na podstawie) i proste prostopadłe, które
-    #przez nie przechodzą i po których znajdziemy te punkty z przecięcia
+
     for i in range(1,pointNum+1):
         point_list.append([points[0][0] + interval_X * i, points[0][1] + interval_Y*i])
-        lines.append([slope, point_list[i - 1][1] - (slope * point_list[i - 1][0])])
-    return lines, point_list
+    return point_list
 
-#sprawdzam po której stronie lini jest figura
-def orientation_check(img, line, point):
-    # to plus 3 zapewnia, że na pewno już się zaczęła ta figura, bo te punkty mogą być czasami lekko oddalone od figury
-    # ale można w sumie zwiększyć jak nie będzie łapać
-    y = math.floor(line[0] * (math.floor(point[0])+3) + line[1])
-    if y>len(img) or y<0 or math.floor(point[0])+3>len(img[0]):
+#sprawdzam po której stronie podstawy jest figura
+def orientation_check(img, point):
+    check = math.floor(point[1])+5
+    if check>len(img) or check<0:
         return 0
-    if img[y][math.floor(point[0])+1] > 0:
+    if img[check][math.floor(point[0])] > 0:
         return 1
     else:
         return 0
 
-
-# to jest w sumie skomplikowaność, lines to te prostopadłe do podstawy linie, a points to punkty na podstawie,
-# przez które te proste przechodzą
-
-# w skrócie od punktu podstawy ide po odpowiadającej mu funkcji liniowej aż nie skończy się obrazek
-def find_furthest_point(img, lines,points):
+#znajduje punkty na cięciu
+def measure_edges(img, points, orientation):
     result = []
-    #orientacje sprawdzam na prostopadłej przechodzącej przez mniej więcej środek podstawy
-    orientation = orientation_check(img, lines[math.floor(len(lines)/2)],points[math.floor(len(lines)/2)])
-    for n in range(len(lines)):
-        line = lines[n]
-        if orientation!=1:
-            for_range = range(math.floor(points[n][0])-1,0, -1)
+    for point in points:
+        if orientation != 1:
+            for_range = range(math.floor(point[1])-2, 0, -1)
+            x = math.floor(point[0])
         else:
-            for_range = range(math.ceil(points[n][0])+1, len(img[0]), 1)
-        # dla każdej prostej jadę po niej od punktu aż do końca figury
+            for_range = range(math.ceil(point[1])+2,len(img))
+            x = math.ceil(point[0])
         for i in for_range:
-            if orientation!=1:
-                y = math.floor(line[0]*i+line[1])
-            else:
-                y = math.ceil(line[0] * i + line[1])
-            #jak się kończy ten biały obrazek, albo fizycznie obrazek to uznaje, że dotarłem do końca
-            if y>len(img) or y<0:
-                result.append([i, y])
-                break
-            if img[y][i]>0:
+            if img[i,x]>0:
                 continue
             else:
-                result.append([i, y])
+                result.append([x,i])
                 break
     return result
 
-def find_cut_points(img, line):
-    lines, point_list = find_perpendicular(line)
-    points = find_furthest_point(img, lines, point_list)
-    return points
+
+#obraca do pionu
+def rotator(img, points):
+    if ((points[1][0] - points[0][0]) == 0 or (points[1][1] - points[0][1]) == 0):
+        slope = 0
+    else:
+        slope = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
+    deg = math.degrees(math.atan(slope))
+    return rotate(img, deg)
 
 if __name__ == "__main__":
     how_many_in_folder = [6, 20, 20, 20, 20, 200, 20, 100]
@@ -142,10 +120,15 @@ if __name__ == "__main__":
             data = io.imread(nazwa_pliku)
 
             line = find_base(data)
+            data = rotator(data,line)
+            #znajduje nową podstawe, ten algos lepiej działa niż ten pierwszy w tym przypadku
+            line = find_base2(data)
+            points = find_middle_points(line)
+            orientation = orientation_check(data,points[math.floor(len(points)/2)])
+            cut_points = measure_edges(data,points,orientation)
 
             checkpoint.append(data)
-            points = find_cut_points(data,line)
-            contours.append(points)
+            contours.append(cut_points)
 
         display(checkpoint, '', contours)
         io.show()
