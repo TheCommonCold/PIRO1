@@ -61,20 +61,8 @@ def find_base(img):
     return base_line
 
 
-# interpoluje punkty pomiędzy końcami podstawy
-def find_middle_points(points):
-    pointNum = 20
-    diff_X = points[1][0] - points[0][0]
-    diff_Y = points[1][1] - points[0][1]
-    interval_X = diff_X / (pointNum + 1)
-    interval_Y = diff_Y / (pointNum + 1)
-
-    point_list = []
-
-    for i in range(1, pointNum + 1):
-        point_list.append([points[0][0] + interval_X * i, points[0][1] + interval_Y * i])
-    return point_list
-
+def midpoint(line):
+    return [(line[0][0]+line[1][0])/2, (line[0][1]+line[1][1])/2]
 
 # sprawdzam po której stronie podstawy jest figura
 def orientation_check(img, point):
@@ -87,25 +75,6 @@ def orientation_check(img, point):
         return 0
 
 
-# znajduje punkty na cięciu
-def measure_edges(img, points, orientation):
-    result = []
-    for point in points:
-        if orientation != 1:
-            for_range = range(math.floor(point[1]) - 2, 0, -1)
-            x = math.floor(point[0])
-        else:
-            for_range = range(math.ceil(point[1]) + 2, len(img))
-            x = math.ceil(point[0])
-        for i in for_range:
-            if img[i, x] > 0:
-                continue
-            else:
-                result.append([x, i])
-                break
-    return result
-
-
 # obraca do pionu
 def rotator(img, points):
     if (points[1][0] - points[0][0]) == 0 or (points[1][1] - points[0][1]) == 0:
@@ -113,7 +82,14 @@ def rotator(img, points):
     else:
         slope = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
     deg = math.degrees(math.atan(slope))
-    return rotate(img, deg)
+    img = rotate(img, deg)
+
+    line = find_base2(img)
+    point = midpoint(line)
+    orientation = orientation_check(img, point)
+    if orientation > 0:
+        img = rotate(img, 180)
+    return img
 
 
 def artur(data):
@@ -144,7 +120,6 @@ def artur(data):
                 break
     # print(pochodne)
     return points
-
 
 def final_artur(points):
     result = []
@@ -191,12 +166,79 @@ def final_artur(points):
     #     # print(errors)
 
 
+def width_detection(img, middle):
+    line_h = math.floor(middle[1] - 10)
+    sides = [0, 0]
+    for i in range(img.shape[1]):
+        if line_h > (img.shape[0]//2):
+            line_h = img.shape[0]//2
+        if img[line_h][i] > 0:
+            sides[0] = i
+            break
+    for i in range(img.shape[1] - 1, 0, -1):
+        if img[line_h][i] > 0:
+            sides[1] = i
+            break
+    return sides
+
+def find_mid_points(sides):
+    number_of_points = 80
+    columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+2)))
+    columns = columns[1:-2]
+    return columns
+
+# znajduje punkty na cięciu
+def measure_edges(img, columns):
+    points = []
+    for col in columns:
+        for i in range(img.shape[0]):
+            if img[i][col] > 0:
+                points.append([col, i])
+                break
+    return points
+
+def compute_distances(cut_points1, cut_points2):
+    distances = []
+    j=len(cut_points2)-1
+    for i in range(len(cut_points1)):
+        distance = cut_points1[i][1]+cut_points2[j][1]
+        j-=1
+        distances.append(distance)
+    return distances
+
+def distance_comparator(points_all):
+    preferences = []
+    i=0
+    for points1 in points_all:
+        scores = []
+        for points2 in points_all:
+            if points1!=points2:
+                distances = compute_distances(points1,points2)
+                scores.append(np.std(distances))
+        preference = np.argsort(scores)
+        for j in range(len(preference)):
+            if preference[j]>=i:
+                preference[j] += 1
+        preferences.append(preference)
+        i += 1
+    return preferences
+
 def print_result(result):
     for r in result:
         for i in r:
             print(i, end=" ")
         print()
 
+
+def processing(data):
+    line = find_base(data)
+    data = rotator(data, line)
+    line = find_base2(data)
+    middle = midpoint(line)
+    sides = width_detection(data, middle)
+    columns = find_mid_points(sides)
+    cut_points = measure_edges(data, columns)
+    return cut_points, data
 
 if __name__ == "__main__":
     how_many_in_folder = [6, 20, 20, 20, 20, 200, 20, 100]
@@ -212,27 +254,17 @@ if __name__ == "__main__":
             print(nazwa_pliku)
             data = io.imread(nazwa_pliku)
 
-            line = find_base(data)
-            data = rotator(data, line)
-            # znajduje nową podstawe, ten algos lepiej działa niż ten pierwszy w tym przypadku
-            line = find_base2(data)
-            points = find_middle_points(line)
-            orientation = orientation_check(data, points[math.floor(len(points) / 2)])
-            if orientation > 0:
-                data = rotate(data, 180)
-            cut_points = measure_edges(data, points, 0)
-            cut_points = artur(data)
-            points_all.append(cut_points)
-            # print(cut_points)
-            checkpoint.append(data)
-            contours.append(cut_points)
-            # print(cut_points)
-            # artur(cut_points)
+            cut_points, data = processing(data)
 
-        # display(checkpoint, '', contours)
-        # io.show()
-        # break
-        result = final_artur(points_all)
+            #cut_points = artur(data)
+
+            points_all.append(cut_points)
+            #checkpoint.append(data)
+            #contours.append(cut_points)
+
+        #display(checkpoint, '', contours)
+        io.show()
+        result = distance_comparator(points_all)
         print_result(result)
         sum_of_points = 0.
         for i in range(len(correct)):
