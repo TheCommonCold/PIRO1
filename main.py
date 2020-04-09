@@ -11,25 +11,20 @@ import numpy as np
 io.use_plugin('matplotlib')
 
 
-def display(checkpoint, nazwa, contour):
-    rows = len(checkpoint)
-    columns = 1
-    fig = plt.figure(figsize=(5, rows * 5))
+
+def display(img, line , points):
+    fig = plt.figure(figsize=(5, 5))
     ploty = []
-    for i in range(rows):
-        ax = fig.add_subplot(rows, columns, i + 1)
-        temp = np.array(contour[i])
-        if len(temp) > 2:
-            ax.plot(temp[:, 0], temp[:, 1], 'ro', markersize=5, linewidth=2)
-        else:
-            p0, p1 = temp
-            ax.plot((p0[0], p1[0]), (p0[1], p1[1]), markersize=10, linewidth=5)
-        ax.set_title(nazwa)
-        ploty.append(ax)
-        io.imshow(checkpoint[i])
-
+    ax = fig.add_subplot(1, 1, 1)
+    if line:
+        p0, p1 = line
+        ax.plot((p0[0], p1[0]), (p0[1], p1[1]), markersize=10, linewidth=5)
+    if points:
+        temp = np.array(points)
+        ax.plot(temp[:, 0], temp[:, 1], 'ro', markersize=5, linewidth=2)
+    ploty.append(ax)
+    io.imshow(img)
     return ploty
-
 
 # znajdywacz podstawy drugą metodą
 def find_base2(img):
@@ -52,7 +47,7 @@ def find_base(img):
     contours = find_contours(img, 0)
     max_distance = 0
     base_line = ()
-    coords = approximate_polygon(contours[0], tolerance=2.5)
+    coords = approximate_polygon(contours[0], tolerance=3)
     for i in range(len(coords) - 1):
         distance = math.sqrt((coords[i + 1][0] - coords[i][0]) ** 2 + (coords[i + 1][1] - coords[i][1]) ** 2)
         if distance > max_distance:
@@ -81,8 +76,11 @@ def rotator(img, points):
         slope = 0
     else:
         slope = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
-    deg = math.degrees(math.atan(slope))
-    img = rotate(img, deg)
+    if slope == 0 and (points[1][1] - points[0][1])!=0:
+        deg = 90
+    else:
+        deg = math.degrees(math.atan(slope))
+    img = rotate(img, deg, resize=True)
 
     line = find_base2(img)
     point = midpoint(line)
@@ -170,7 +168,7 @@ def width_detection(img, middle):
     line_h = math.floor(middle[1] - 10)
     sides = [0, 0]
     for i in range(img.shape[1]):
-        if line_h > (img.shape[0]//2):
+        if line_h < (img.shape[0]//2):
             line_h = img.shape[0]//2
         if img[line_h][i] > 0:
             sides[0] = i
@@ -179,12 +177,12 @@ def width_detection(img, middle):
         if img[line_h][i] > 0:
             sides[1] = i
             break
-    return sides
+    return sides, line_h
 
 def find_mid_points(sides):
-    number_of_points = 80
-    columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+2)))
-    columns = columns[1:-2]
+    number_of_points = 40
+    columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+1)))
+    columns = columns[1:-1]
     return columns
 
 # znajduje punkty na cięciu
@@ -235,15 +233,16 @@ def processing(data):
     data = rotator(data, line)
     line = find_base2(data)
     middle = midpoint(line)
-    sides = width_detection(data, middle)
+    sides, line_h = width_detection(data, middle)
     columns = find_mid_points(sides)
     cut_points = measure_edges(data, columns)
+    display(data,[[sides[0],line_h],[sides[1],line_h]],cut_points)
     return cut_points, data
 
 if __name__ == "__main__":
-    how_many_in_folder = [6, 20, 20, 20, 20, 200, 20, 100]
+    how_many_in_folder = [6, 20, 20, 20, 20, 200, 200, 20,100]
     wypis_na_koniec=""
-    for set_nr in range(9):
+    for set_nr in range(1,2):
         f = open("set{}/correct.txt".format(set_nr), "r")
         correct = list(map(int, f.read().split('\n')[:-1]))
         points_all = []
@@ -255,14 +254,9 @@ if __name__ == "__main__":
             data = io.imread(nazwa_pliku)
 
             cut_points, data = processing(data)
-
             #cut_points = artur(data)
-
             points_all.append(cut_points)
-            #checkpoint.append(data)
-            #contours.append(cut_points)
 
-        #display(checkpoint, '', contours)
         io.show()
         result = distance_comparator(points_all)
         print_result(result)
@@ -275,6 +269,4 @@ if __name__ == "__main__":
         wypis=str(sum_of_points)+ ' na '+ str(len(correct))
         print(wypis)
         wypis_na_koniec+=wypis+'\n'
-        if set_nr >= 4:
-            break
     print(wypis_na_koniec)
