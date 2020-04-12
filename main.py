@@ -10,7 +10,8 @@ import numpy as np
 
 io.use_plugin('matplotlib')
 
-
+accuracy = 0.2
+number_of_points = 80
 
 def display(img, line , points, name=""):
     fig = plt.figure(figsize=(5, 5))
@@ -212,20 +213,12 @@ def final_artur(points):
 
 
 def width_detection(img, middle):
-    line_h = math.floor(middle[1] - 10)
     sides = [0, 0]
-    for i in range(img.shape[1]):
-        if img[line_h][i] > 0:
-            sides[0] = i
-            break
-    for i in range(img.shape[1] - 1, 0, -1):
-        if img[line_h][i] > 0:
-            sides[1] = i
-            break
-    return sides, line_h
+    sides[0] = find_furthest_left(img)
+    sides[1] = find_furthest_right(img)
+    return sides
 
 def find_mid_points(sides):
-    number_of_points = 80
     columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+1)))
     columns = columns[1:-1]
     return columns
@@ -235,7 +228,7 @@ def measure_edges(img, columns):
     points = []
     for col in columns:
         for i in range(img.shape[0]):
-            if img[i][col] > 0:
+            if img[i][col] > accuracy:
                 points.append([col, i])
                 break
     return points
@@ -278,10 +271,10 @@ def processing(data, debug_name=""):
     data = rotator(data, line)
     data = resizer(data)
     middle = [len(data[0])//2,find_furthest_bottom(data)]
-    sides, line_h = width_detection(data, middle)
+    sides = width_detection(data, middle)
     columns = find_mid_points(sides)
     cut_points = measure_edges(data, columns)
-    display(data,[[sides[0],line_h],[sides[1],line_h]],cut_points,debug_name)
+    display(data,False,cut_points,debug_name)
     return cut_points, data
 
 if __name__ == "__main__":
