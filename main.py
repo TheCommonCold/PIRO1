@@ -1,7 +1,7 @@
 from skimage import io, measure
 from matplotlib import pylab as plt
 from skimage.feature import corner_harris, canny, corner_peaks
-from skimage.transform import probabilistic_hough_line, rotate
+from skimage.transform import probabilistic_hough_line, rotate, rescale
 from skimage.morphology import erosion, dilation, closing
 from skimage.morphology import black_tophat, skeletonize, convex_hull_image
 from skimage.measure import find_contours, approximate_polygon
@@ -12,7 +12,7 @@ io.use_plugin('matplotlib')
 
 
 
-def display(img, line , points):
+def display(img, line , points, name=""):
     fig = plt.figure(figsize=(5, 5))
     ploty = []
     ax = fig.add_subplot(1, 1, 1)
@@ -22,6 +22,7 @@ def display(img, line , points):
     if points:
         temp = np.array(points)
         ax.plot(temp[:, 0], temp[:, 1], 'ro', markersize=5, linewidth=2)
+    ax.set_title(name)
     ploty.append(ax)
     io.imshow(img)
     return ploty
@@ -55,9 +56,55 @@ def find_base(img):
             base_line = [[coords[i + 1][1], coords[i + 1][0]], [coords[i][1], coords[i][0]]]
     return base_line
 
+def find_furthest_bottom(img):
+    for i in range(len(img)-1,0,-1):
+        if img[i][len(img[0])//2]>0:
+            return i
+    return -1
 
 def midpoint(line):
     return [(line[0][0]+line[1][0])/2, (line[0][1]+line[1][1])/2]
+
+def find_furthest_left(img):
+    for i in range(len(img[0])):
+        for j in range(len(img)):
+            if img[j][i]>0:
+                return i
+    return -1
+
+def find_furthest_right(img):
+    for i in range(len(img[0])-1,0,-1):
+        for j in range(len(img)):
+            if img[j][i]>0:
+                return i
+    return -1
+
+def find_furthest_top(img):
+    for j in range(len(img)):
+        for i in range(len(img[0])):
+            if img[j][i]>0:
+                return j
+    return -1
+
+def resizer(img):
+    top = find_furthest_top(img)
+    bottom = find_furthest_bottom(img)
+
+    vertical = bottom-top
+
+    right = find_furthest_right(img)
+    left = find_furthest_left(img)
+
+    horizontal = right-left
+
+    vertical_scale = len(img)/vertical
+    horizontal_scale = len(img[0])/horizontal
+
+    img = img[np.max([0,top-1]):np.min([len(img)-1,bottom+1]),np.max([0,left-1]):np.min([len(img[0])-1,right+1])]
+
+    img = rescale(img, np.max([vertical_scale,horizontal_scale]), anti_aliasing=False)
+    return img
+
 
 # sprawdzam po której stronie podstawy jest figura
 def orientation_check(img, point):
@@ -168,8 +215,6 @@ def width_detection(img, middle):
     line_h = math.floor(middle[1] - 10)
     sides = [0, 0]
     for i in range(img.shape[1]):
-        if line_h < (img.shape[0]//2):
-            line_h = img.shape[0]//2
         if img[line_h][i] > 0:
             sides[0] = i
             break
@@ -180,7 +225,7 @@ def width_detection(img, middle):
     return sides, line_h
 
 def find_mid_points(sides):
-    number_of_points = 40
+    number_of_points = 80
     columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+1)))
     columns = columns[1:-1]
     return columns
@@ -210,7 +255,7 @@ def distance_comparator(points_all):
     for points1 in points_all:
         scores = []
         for points2 in points_all:
-            if points1!=points2:
+            if points1 != points2:
                 distances = compute_distances(points1,points2)
                 scores.append(np.std(distances))
         preference = np.argsort(scores)
@@ -228,15 +273,15 @@ def print_result(result):
         print()
 
 
-def processing(data):
+def processing(data, debug_name=""):
     line = find_base(data)
     data = rotator(data, line)
-    line = find_base2(data)
-    middle = midpoint(line)
+    data = resizer(data)
+    middle = [len(data[0])//2,find_furthest_bottom(data)]
     sides, line_h = width_detection(data, middle)
     columns = find_mid_points(sides)
     cut_points = measure_edges(data, columns)
-    display(data,[[sides[0],line_h],[sides[1],line_h]],cut_points)
+    display(data,[[sides[0],line_h],[sides[1],line_h]],cut_points,debug_name)
     return cut_points, data
 
 if __name__ == "__main__":
@@ -253,7 +298,11 @@ if __name__ == "__main__":
             print(nazwa_pliku)
             data = io.imread(nazwa_pliku)
 
-            cut_points, data = processing(data)
+            cut_points, data = processing(data,"set{}/{}.png".format(set_nr, img_nr))
+            if len(cut_points) == 0:
+                print("DEBUG",cut_points)
+                display(data,False,False)
+                io.show()
             #cut_points = artur(data)
             points_all.append(cut_points)
 
