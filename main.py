@@ -119,7 +119,7 @@ def orientation_check(img, point):
 
 
 # obraca do pionu
-def rotator(img, points):
+def rotator(img, points,perfect = False):
     if (points[1][0] - points[0][0]) == 0 or (points[1][1] - points[0][1]) == 0:
         slope = 0
     else:
@@ -132,10 +132,12 @@ def rotator(img, points):
 
     line = find_base2(img)
     point = midpoint(line)
-    orientation = orientation_check(img, point)
-    if orientation > 0:
-        img = rotate(img, 180)
+    if perfect==False:
+        orientation = orientation_check(img, point)
+        if orientation > 0:
+            img = rotate(img, 180)
     return img
+
 
 
 def artur(data):
@@ -219,8 +221,8 @@ def width_detection(img, middle):
     return sides
 
 def find_mid_points(sides):
-    columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+1)))
-    columns = columns[1:-1]
+    columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+2)))
+    columns = columns[2:-1]
     return columns
 
 # znajduje punkty na cięciu
@@ -242,8 +244,18 @@ def compute_distances(cut_points1, cut_points2):
         distances.append(distance)
     return distances
 
+def preference_hacker(preferences, doubles):
+    print(doubles)
+    print_result(preferences)
+    for i in range(len(preferences)):
+        if doubles[i]==0:
+            temp=np.where(preferences[preferences[i][0]] == i)
+            preferences[preferences[i][0]][0],preferences[preferences[i][0]][temp] = preferences[preferences[i][0]][temp], preferences[preferences[i][0]][0]
+    return preferences
+
 def distance_comparator(points_all):
     preferences = []
+    doubles = np.zeros(len(points_all))
     i=0
     for points1 in points_all:
         scores = []
@@ -256,14 +268,49 @@ def distance_comparator(points_all):
             if preference[j]>=i:
                 preference[j] += 1
         preferences.append(preference)
+        doubles[preference[0]]+=1
+        i += 1
+    return preferences,doubles
+
+def retardo_comperator(points_all):
+    preferences = []
+    i = 0
+    retard = []
+    for points in points_all:
+        score = []
+        for i in range(len(points)-1):
+            if points[i+1][1]>points[i][1]:
+                score.append(1)
+            else:
+                score.append(0)
+            retard.append(score)
+    for score1 in retard:
+        print(score1)
+        scores = []
+        for score2 in retard:
+            if score1!=score2:
+                temp = 0
+                for i in score1:
+                    for j in reversed(score2):
+                        if i == j:
+                            temp+=1
+                scores.append(temp)
+        preference = np.flip(np.argsort(scores))
+        for j in range(len(preference)):
+            if preference[j]>=i:
+                preference[j] += 1
+        preferences.append(preference)
         i += 1
     return preferences
 
 def print_result(result):
+    n=0
     for r in result:
+        print("Obrazek",n, ":", end=" ")
         for i in r:
             print(i, end=" ")
         print()
+        n+=1
 
 
 def processing(data, debug_name=""):
@@ -274,13 +321,13 @@ def processing(data, debug_name=""):
     sides = width_detection(data, middle)
     columns = find_mid_points(sides)
     cut_points = measure_edges(data, columns)
-    display(data,False,cut_points,debug_name)
+    #display(data,False,cut_points,debug_name)
     return cut_points, data
 
 if __name__ == "__main__":
     how_many_in_folder = [6, 20, 20, 20, 20, 200, 200, 20,100]
     wypis_na_koniec=""
-    for set_nr in range(1,2):
+    for set_nr in range(0,9):
         f = open("set{}/correct.txt".format(set_nr), "r")
         correct = list(map(int, f.read().split('\n')[:-1]))
         points_all = []
@@ -300,7 +347,8 @@ if __name__ == "__main__":
             points_all.append(cut_points)
 
         io.show()
-        result = distance_comparator(points_all)
+        result, doubles = distance_comparator(points_all)
+        result = preference_hacker(result, doubles)
         print_result(result)
         sum_of_points = 0.
         for i in range(len(correct)):
