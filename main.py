@@ -57,6 +57,13 @@ def find_base(img):
             base_line = [[coords[i + 1][1], coords[i + 1][0]], [coords[i][1], coords[i][0]]]
     return base_line
 
+# znajdywacz podstawy pierwsza metodą
+def find_base_smart(img):
+    contours = find_contours(img, 0)
+    coords = approximate_polygon(contours[0], tolerance=3)
+    print(coords)
+    return
+
 def find_furthest_bottom(img):
     for i in range(len(img)-1,0,-1):
         if img[i][len(img[0])//2]>0:
@@ -245,7 +252,6 @@ def compute_distances(cut_points1, cut_points2):
     return distances
 
 def preference_hacker(preferences, doubles):
-    print(doubles)
     print_result(preferences)
     for i in range(len(preferences)):
         if doubles[i]==0:
@@ -315,6 +321,7 @@ def print_result(result):
 
 def processing(data, debug_name=""):
     line = find_base(data)
+    find_base_smart(data)#ta linia zamiast tej wyżej
     data = rotator(data, line)
     data = resizer(data)
     middle = [len(data[0])//2,find_furthest_bottom(data)]
