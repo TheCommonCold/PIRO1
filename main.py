@@ -13,7 +13,8 @@ io.use_plugin('matplotlib')
 accuracy = 0.2
 number_of_points = 80
 
-def display(img, line , points, name=""):
+
+def display(img, line, points, name=""):
     fig = plt.figure(figsize=(5, 5))
     ploty = []
     ax = fig.add_subplot(1, 1, 1)
@@ -27,6 +28,7 @@ def display(img, line , points, name=""):
     ploty.append(ax)
     io.imshow(img)
     return ploty
+
 
 # znajdywacz podstawy drugą metodą
 def find_base2(img):
@@ -57,60 +59,104 @@ def find_base(img):
             base_line = [[coords[i + 1][1], coords[i + 1][0]], [coords[i][1], coords[i][0]]]
     return base_line
 
+
+class Odcinek:
+    def __init__(self, p1, p2, a1, a2):
+        self.p1 = [int(x) for x in p1]
+        self.p2 = [int(x) for x in p2]
+        self.a1 = a1
+        self.a2 = a2
+        odl = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** (1 / 2)
+        self.length = odl(self.p1, self.p2)
+        self.a = (p2[1] - p1[1]) / (p2[0] - p1[0])
+        self.b = p1[1] - self.a * p1[0]
+        self.delta_angles = abs(90 - self.a1) + abs(90 - self.a2)
+
+
+def get_angle(a, b, c):
+    ang = math.degrees(math.atan2(c[1] - b[1], c[0] - b[0]) - math.atan2(a[1] - b[1], a[0] - b[0]))
+    return ang + 360 if ang < 0 else ang
+
+
 # znajdywacz podstawy pierwsza metodą
 def find_base_smart(img):
     contours = find_contours(img, 0)
-    coords = approximate_polygon(contours[0], tolerance=3)
-    print(coords)
-    return
+    coords = approximate_polygon(contours[0], tolerance=3)[:-1]
+    angles = []
+    for i in range(len(coords)):
+        angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
+    new_coords = []
+    for i in range(len(coords)):
+        if not 160 <= angles[i] <= 200:
+            new_coords.append(coords[i])
+    coords = new_coords
+    angles = []
+    for i in range(len(coords)):
+        angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
+    odcinki = []
+    for i in range(len(coords)):
+        odcinki.append(Odcinek(coords[i], coords[(i + 1) % len(coords)], angles[i], angles[(i + 1) % len(coords)]))
+    # for i in odcinki:
+    #     print(i.p1, i.p2, i.how_close_to_right_angles())
+    by_angles = sorted(odcinki, key=lambda x: x.delta_angles)
+    by_length = sorted(odcinki, key=lambda x: -x.length)
+
+    return by_angles, by_length
+
 
 def find_furthest_bottom(img):
-    for i in range(len(img)-1,0,-1):
-        if img[i][len(img[0])//2]>0:
+    for i in range(len(img) - 1, 0, -1):
+        if img[i][len(img[0]) // 2] > 0:
             return i
     return -1
 
+
 def midpoint(line):
-    return [(line[0][0]+line[1][0])/2, (line[0][1]+line[1][1])/2]
+    return [(line[0][0] + line[1][0]) / 2, (line[0][1] + line[1][1]) / 2]
+
 
 def find_furthest_left(img):
     for i in range(len(img[0])):
         for j in range(len(img)):
-            if img[j][i]>0:
+            if img[j][i] > 0:
                 return i
     return -1
 
+
 def find_furthest_right(img):
-    for i in range(len(img[0])-1,0,-1):
+    for i in range(len(img[0]) - 1, 0, -1):
         for j in range(len(img)):
-            if img[j][i]>0:
+            if img[j][i] > 0:
                 return i
     return -1
+
 
 def find_furthest_top(img):
     for j in range(len(img)):
         for i in range(len(img[0])):
-            if img[j][i]>0:
+            if img[j][i] > 0:
                 return j
     return -1
+
 
 def resizer(img):
     top = find_furthest_top(img)
     bottom = find_furthest_bottom(img)
 
-    vertical = bottom-top
+    vertical = bottom - top
 
     right = find_furthest_right(img)
     left = find_furthest_left(img)
 
-    horizontal = right-left
+    horizontal = right - left
 
-    vertical_scale = len(img)/vertical
-    horizontal_scale = len(img[0])/horizontal
+    vertical_scale = len(img) / vertical
+    horizontal_scale = len(img[0]) / horizontal
 
-    img = img[np.max([0,top-1]):np.min([len(img)-1,bottom+1]),np.max([0,left-1]):np.min([len(img[0])-1,right+1])]
+    img = img[np.max([0, top - 1]):np.min([len(img) - 1, bottom + 1]),
+          np.max([0, left - 1]):np.min([len(img[0]) - 1, right + 1])]
 
-    img = rescale(img, np.max([vertical_scale,horizontal_scale]), anti_aliasing=False)
+    img = rescale(img, np.max([vertical_scale, horizontal_scale]), anti_aliasing=False)
     return img
 
 
@@ -126,12 +172,12 @@ def orientation_check(img, point):
 
 
 # obraca do pionu
-def rotator(img, points,perfect = False):
+def rotator(img, points, perfect=False):
     if (points[1][0] - points[0][0]) == 0 or (points[1][1] - points[0][1]) == 0:
         slope = 0
     else:
         slope = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
-    if slope == 0 and (points[1][1] - points[0][1])!=0:
+    if slope == 0 and (points[1][1] - points[0][1]) != 0:
         deg = 90
     else:
         deg = math.degrees(math.atan(slope))
@@ -139,12 +185,11 @@ def rotator(img, points,perfect = False):
 
     line = find_base2(img)
     point = midpoint(line)
-    if perfect==False:
+    if perfect == False:
         orientation = orientation_check(img, point)
         if orientation > 0:
             img = rotate(img, 180)
     return img
-
 
 
 def artur(data):
@@ -175,6 +220,7 @@ def artur(data):
                 break
     # print(pochodne)
     return points
+
 
 def final_artur(points):
     result = []
@@ -227,10 +273,12 @@ def width_detection(img, middle):
     sides[1] = find_furthest_right(img)
     return sides
 
+
 def find_mid_points(sides):
-    columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points+2)))
+    columns = list(map(int, np.linspace(sides[0], sides[1], number_of_points + 2)))
     columns = columns[2:-1]
     return columns
+
 
 # znajduje punkty na cięciu
 def measure_edges(img, columns):
@@ -242,41 +290,47 @@ def measure_edges(img, columns):
                 break
     return points
 
+
 def compute_distances(cut_points1, cut_points2):
     distances = []
-    j=len(cut_points2)-1
+    j = len(cut_points2) - 1
     for i in range(len(cut_points1)):
-        distance = cut_points1[i][1]+cut_points2[j][1]
-        j-=1
+        distance = cut_points1[i][1] + cut_points2[j][1]
+        j -= 1
         distances.append(distance)
     return distances
+
 
 def preference_hacker(preferences, doubles):
     print_result(preferences)
     for i in range(len(preferences)):
-        if doubles[i]==0:
-            temp=np.where(preferences[preferences[i][0]] == i)
-            preferences[preferences[i][0]][0],preferences[preferences[i][0]][temp] = preferences[preferences[i][0]][temp], preferences[preferences[i][0]][0]
+        if doubles[i] == 0:
+            temp = np.where(preferences[preferences[i][0]] == i)
+            preferences[preferences[i][0]][0], preferences[preferences[i][0]][temp] = preferences[preferences[i][0]][
+                                                                                          temp], \
+                                                                                      preferences[preferences[i][0]][0]
     return preferences
+
 
 def distance_comparator(points_all):
     preferences = []
     doubles = np.zeros(len(points_all))
-    i=0
+    i = 0
     for points1 in points_all:
         scores = []
         for points2 in points_all:
             if points1 != points2:
-                distances = compute_distances(points1,points2)
+                distances = compute_distances(points1, points2)
                 scores.append(np.std(distances))
         preference = np.argsort(scores)
         for j in range(len(preference)):
-            if preference[j]>=i:
+            if preference[j] >= i:
                 preference[j] += 1
         preferences.append(preference)
-        doubles[preference[0]]+=1
+        doubles[preference[0]] += 1
         i += 1
-    return preferences,doubles
+    return preferences, doubles
+
 
 def retardo_comperator(points_all):
     preferences = []
@@ -284,8 +338,8 @@ def retardo_comperator(points_all):
     retard = []
     for points in points_all:
         score = []
-        for i in range(len(points)-1):
-            if points[i+1][1]>points[i][1]:
+        for i in range(len(points) - 1):
+            if points[i + 1][1] > points[i][1]:
                 score.append(1)
             else:
                 score.append(0)
@@ -294,47 +348,49 @@ def retardo_comperator(points_all):
         print(score1)
         scores = []
         for score2 in retard:
-            if score1!=score2:
+            if score1 != score2:
                 temp = 0
                 for i in score1:
                     for j in reversed(score2):
                         if i == j:
-                            temp+=1
+                            temp += 1
                 scores.append(temp)
         preference = np.flip(np.argsort(scores))
         for j in range(len(preference)):
-            if preference[j]>=i:
+            if preference[j] >= i:
                 preference[j] += 1
         preferences.append(preference)
         i += 1
     return preferences
 
+
 def print_result(result):
-    n=0
+    n = 0
     for r in result:
-        print("Obrazek",n, ":", end=" ")
+        print("Obrazek", n, ":", end=" ")
         for i in r:
             print(i, end=" ")
         print()
-        n+=1
+        n += 1
 
 
 def processing(data, debug_name=""):
     line = find_base(data)
-    find_base_smart(data)#ta linia zamiast tej wyżej
+    find_base_smart(data)  # ta linia zamiast tej wyżej
     data = rotator(data, line)
     data = resizer(data)
-    middle = [len(data[0])//2,find_furthest_bottom(data)]
+    middle = [len(data[0]) // 2, find_furthest_bottom(data)]
     sides = width_detection(data, middle)
     columns = find_mid_points(sides)
     cut_points = measure_edges(data, columns)
-    #display(data,False,cut_points,debug_name)
+    # display(data,False,cut_points,debug_name)
     return cut_points, data
 
+
 if __name__ == "__main__":
-    how_many_in_folder = [6, 20, 20, 20, 20, 200, 200, 20,100]
-    wypis_na_koniec=""
-    for set_nr in range(0,9):
+    how_many_in_folder = [6, 20, 20, 20, 20, 200, 200, 20, 100]
+    wypis_na_koniec = ""
+    for set_nr in range(0, 9):
         f = open("set{}/correct.txt".format(set_nr), "r")
         correct = list(map(int, f.read().split('\n')[:-1]))
         points_all = []
@@ -345,12 +401,12 @@ if __name__ == "__main__":
             print(nazwa_pliku)
             data = io.imread(nazwa_pliku)
 
-            cut_points, data = processing(data,"set{}/{}.png".format(set_nr, img_nr))
+            cut_points, data = processing(data, "set{}/{}.png".format(set_nr, img_nr))
             if len(cut_points) == 0:
-                print("DEBUG",cut_points)
-                display(data,False,False)
+                print("DEBUG", cut_points)
+                display(data, False, False)
                 io.show()
-            #cut_points = artur(data)
+            # cut_points = artur(data)
             points_all.append(cut_points)
 
         io.show()
@@ -363,7 +419,7 @@ if __name__ == "__main__":
                 if result[i][j] == correct[i]:
                     sum_of_points += (1 / (1 + j))
                     break
-        wypis=str(sum_of_points)+ ' na '+ str(len(correct))
+        wypis = str(sum_of_points) + ' na ' + str(len(correct))
         print(wypis)
-        wypis_na_koniec+=wypis+'\n'
+        wypis_na_koniec += wypis + '\n'
     print(wypis_na_koniec)
