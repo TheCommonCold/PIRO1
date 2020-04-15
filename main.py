@@ -10,7 +10,7 @@ import numpy as np
 
 io.use_plugin('matplotlib')
 
-accuracy = 0.2
+accuracy = 0.99
 number_of_points = 80
 
 
@@ -55,8 +55,9 @@ def find_base(img):
     for i in range(len(coords) - 1):
         distance = math.sqrt((coords[i + 1][0] - coords[i][0]) ** 2 + (coords[i + 1][1] - coords[i][1]) ** 2)
         if distance > max_distance:
-            max_distance = distance
-            base_line = [[coords[i + 1][1], coords[i + 1][0]], [coords[i][1], coords[i][0]]]
+            if find_if_base_ok(img, [[coords[i + 1][1], coords[i + 1][0]], [coords[i][1], coords[i][0]]])>0:
+                max_distance = distance
+                base_line = [[coords[i + 1][1], coords[i + 1][0]], [coords[i][1], coords[i][0]]]
     return base_line
 
 
@@ -190,82 +191,6 @@ def rotator(img, points, perfect=False):
             img = rotate(img, 180)
     return img
 
-
-def artur(data):
-    line = find_base2(data)
-    # 10 pixeli nad podstawą
-    line_h = line[0][1] - 10
-    line = [0, 0]
-    for i in range(data.shape[0]):
-        if data[line_h][i]:
-            line[0] = i
-            break
-    for i in range(data.shape[1] - 1, -1, -1):
-        if data[line_h][i]:
-            line[1] = i
-            break
-    line = line if line[0] < line[1] else [line[1], line[0]]
-    # TODO parametrise
-    line[0] += data.shape[1] // 50
-    line[1] -= data.shape[1] // 50
-    # TODO parametrise
-    number_of_points = 80
-    columns = list(map(int, np.linspace(line[0], line[1], number_of_points)))
-    points = []
-    for col in columns:
-        for i in range(data.shape[0]):
-            if data[i][col]:
-                points.append([col, i])
-                break
-    # print(pochodne)
-    return points
-
-
-def final_artur(points):
-    result = []
-    # pochodne = []
-    # for p in points:
-    #     pochodne_singular = []
-    #     for i in range(len(p) - 1):
-    #         [x1, y1] = p[i]
-    #         [x2, y2] = p[i + 1]
-    #         dy = y2 - y1
-    #         dx = x2 - x1
-    #         pochodne_singular.append(dy / dx)
-    #     pochodne.append(pochodne_singular)
-    sums_all = [[] for _ in range(len(points))]
-
-    for i in range(len(points)):
-        p1 = points[i]
-        for j in range(i + 1, len(points)):
-            if i == j: continue
-            p2 = points[j]
-            sums = []
-            for k in range(len(p1)):
-                sums.append(p1[k][1] + p2[len(p1) - k - 1][1])
-            std = np.std(sums)
-            sums_all[i].append([j, std])
-            sums_all[j].append([i, std])
-    for l in sums_all:
-        newlist = sorted(l, key=lambda x: x[1])
-        only_nums = list(map(lambda x: x[0], newlist))
-        result.append(only_nums)
-    return result
-    # for i in range(len(pochodne)):
-    #     p1 = pochodne[i]
-    #     print(p1)
-    #     errors = []
-    #     for j in range(len(pochodne)):
-    #         if i == j: continue
-    #         p2 = pochodne[j]
-    #         error = 0.
-    #         for k in range(len(p1)):
-    #             error += (p1[k] + p2[len(p1) - k - 1]) ** 2
-    #         errors.append([error, j])
-    #     print(errors)
-    #     # print(errors)
-
-
 def width_detection(img, middle):
     sides = [0, 0]
     sides[0] = find_furthest_left(img)
@@ -301,7 +226,6 @@ def compute_distances(cut_points1, cut_points2):
 
 
 def preference_hacker(preferences, doubles):
-    print_result(preferences)
     for i in range(len(preferences)):
         if doubles[i] == 0:
             temp = np.where(preferences[preferences[i][0]] == i)
@@ -330,40 +254,81 @@ def distance_comparator(points_all):
         i += 1
     return preferences, doubles
 
+#znajduje prostopadłe do prostej przechodzącej przez punkty z inputu, proste są zapisane jako a oraz b
+def find_perpendicular(points):
+    if ((points[1][0] - points[0][0]) == 0 or (points[1][1] - points[0][1]) == 0):
+        slope = 0
+    else:
+        slope = (points[1][1] - points[0][1]) / (points[1][0] - points[0][0])
+        slope = -1/slope
+    #slope to a w funkcji liniowej
 
-def retardo_comperator(points_all):
-    preferences = []
-    i = 0
-    retard = []
-    for points in points_all:
-        score = []
-        for i in range(len(points) - 1):
-            if points[i + 1][1] > points[i][1]:
-                score.append(1)
+    #to jest przygotowanko do generowania punktów interpolowanych pomiędzy tymi dwoma punktami z inputu
+    pointNum = 20
+    diff_X = points[1][0]- points[0][0]
+    diff_Y = points[1][1] - points[0][1]
+    interval_X = diff_X / (pointNum + 1)
+    interval_Y = diff_Y / (pointNum + 1)
+
+    point_list = []
+    lines = []
+    #tu generuje punkty pomiędzy tymi punktami z inputu (czyli punkty na podstawie) i proste prostopadłe, które
+    #przez nie przechodzą i po których znajdziemy te punkty z przecięcia
+    for i in range(1,pointNum+1):
+        point_list.append([points[0][0] + interval_X * i, points[0][1] + interval_Y*i])
+        lines.append([slope, point_list[i - 1][1] - (slope * point_list[i - 1][0])])
+    return lines, point_list
+
+#sprawdzam po której stronie lini jest figura
+def orientation_check_old(img, line, point):
+    # to plus 3 zapewnia, że na pewno już się zaczęła ta figura, bo te punkty mogą być czasami lekko oddalone od figury
+    # ale można w sumie zwiększyć jak nie będzie łapać
+    y = math.floor(line[0] * (math.floor(point[0])+3) + line[1])
+    if y>len(img) or y<0 or math.floor(point[0])+3>len(img[0]):
+        return 0
+    if img[y][math.floor(point[0])+1] > 0:
+        return 1
+    else:
+        return 0
+
+
+# to jest w sumie skomplikowaność, lines to te prostopadłe do podstawy linie, a points to punkty na podstawie,
+# przez które te proste przechodzą
+
+# w skrócie od punktu podstawy ide po odpowiadającej mu funkcji liniowej aż nie skończy się obrazek
+def find_furthest_point(img, lines,points):
+    result = []
+    #orientacje sprawdzam na prostopadłej przechodzącej przez mniej więcej środek podstawy
+    orientation = orientation_check_old(img, lines[math.floor(len(lines)/2)],points[math.floor(len(lines)/2)])
+    for n in range(len(lines)):
+        BAD = 0
+        line = lines[n]
+        if orientation!=1:
+            for_range = range(math.floor(points[n][0])-1,0-1, -1)
+        else:
+            for_range = range(math.ceil(points[n][0])+1, len(img[0]), 1)
+        # dla każdej prostej jadę po niej od punktu aż do końca figury
+        for i in for_range:
+            if orientation!=1:
+                y = math.floor(line[0]*i+line[1])
             else:
-                score.append(0)
-            retard.append(score)
-    for score1 in retard:
-        print(score1)
-        scores = []
-        for score2 in retard:
-            if score1 != score2:
-                temp = 0
-                for i in score1:
-                    for j in reversed(score2):
-                        if i == j:
-                            temp += 1
-                scores.append(temp)
-        preference = np.flip(np.argsort(scores))
-        for j in range(len(preference)):
-            if preference[j] >= i:
-                preference[j] += 1
-        preferences.append(preference)
-        i += 1
-    return preferences
+                y = math.ceil(line[0] * i + line[1])
+            #jak się kończy ten biały obrazek, albo fizycznie obrazek to uznaje, że dotarłem do końca
+            if y>0 and y<len(img) and img[y][i]==1 and BAD!=1:
+                BAD += 1
+            elif y>0 and y<len(img) and BAD==1 and img[y][i]==0:
+                BAD += 1
+            if BAD>2:
+                return 0
 
+    return 1
 
-def print_result(result):
+def find_if_base_ok(img, line):
+    lines, point_list = find_perpendicular(line)
+    result = find_furthest_point(img, lines, point_list)
+    return result
+
+def print_debug(result):
     n = 0
     for r in result:
         print("Obrazek", n, ":", end=" ")
@@ -372,10 +337,18 @@ def print_result(result):
         print()
         n += 1
 
+def print_result(result):
+    n = 0
+    for r in result:
+        for i in r:
+            print(i, end=" ")
+        print()
+        n += 1
+
 
 def processing(data, debug_name=""):
-    line = find_base2(data)
-    display(data, line, False, debug_name)
+    line = find_base(data)
+    #display(data, line, False, debug_name)
     data = rotator(data, line)
     data = resizer(data)
     middle = [len(data[0]) // 2, find_furthest_bottom(data)]
@@ -389,7 +362,7 @@ def processing(data, debug_name=""):
 if __name__ == "__main__":
     how_many_in_folder = [6, 20, 20, 20, 20, 200, 200, 20, 100]
     wypis_na_koniec = ""
-    for set_nr in range(6, 7):
+    for set_nr in range(0, 9):
         f = open("set{}/correct.txt".format(set_nr), "r")
         correct = list(map(int, f.read().split('\n')[:-1]))
         points_all = []
@@ -408,10 +381,12 @@ if __name__ == "__main__":
             # cut_points = artur(data)
             points_all.append(cut_points)
 
-        io.show()
+            io.show()
         result, doubles = distance_comparator(points_all)
         result = preference_hacker(result, doubles)
-        print_result(result)
+
+        print_debug(result)
+
         sum_of_points = 0.
         for i in range(len(correct)):
             for j in range(len(result[i])):
