@@ -61,48 +61,6 @@ def find_base(img):
     return base_line
 
 
-class Odcinek:
-    def __init__(self, p1, p2, a1, a2):
-        self.p1 = [int(x) for x in p1]
-        self.p2 = [int(x) for x in p2]
-        self.p1[0], self.p1[1] = self.p1[1], self.p1[0]
-        self.p2[0], self.p2[1] = self.p2[1], self.p2[0]
-        self.a1 = a1
-        self.a2 = a2
-        odl = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** (1 / 2)
-        self.length = odl(self.p1, self.p2)
-        self.a = (p2[1] - p1[1]) / (p2[0] - p1[0])
-        self.b = p1[1] - self.a * p1[0]
-        self.delta_angles = abs(90 - self.a1) + abs(90 - self.a2)
-
-
-def get_angle(a, b, c):
-    ang = math.degrees(math.atan2(c[1] - b[1], c[0] - b[0]) - math.atan2(a[1] - b[1], a[0] - b[0]))
-    return ang + 360 if ang < 0 else ang
-
-
-# znajdywacz podstawy pierwsza metodą
-def find_base_smart(img):
-    contours = find_contours(img, 0)
-    coords = approximate_polygon(contours[0], tolerance=3)[:-1]
-    angles = []
-    for i in range(len(coords)):
-        angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
-    angles = []
-    for i in range(len(coords)):
-        angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
-    odcinki = []
-    for i in range(len(coords)):
-        odcinki.append(Odcinek(coords[i], coords[(i + 1) % len(coords)], angles[i], angles[(i + 1) % len(coords)]))
-    # for i in odcinki:
-    #     print(i.p1, i.p2, i.how_close_to_right_angles())
-    by_angles = sorted(odcinki, key=lambda x: x.delta_angles)
-    by_length = sorted(odcinki, key=lambda x: -x.length)
-
-    by_angles = [[x.p1, x.p2] for x in by_angles]
-    by_length = [[x.p1, x.p2] for x in by_length]
-    return by_angles[0], by_length[0], coords
-
 
 def find_furthest_bottom(img):
     for i in range(len(img) - 1, 0, -1):
@@ -370,30 +328,14 @@ if __name__ == "__main__":
         contours = []
         for img_nr in range(how_many_in_folder[set_nr]):
             nazwa_pliku = "set{}/{}.png".format(set_nr, img_nr)
-            print(nazwa_pliku)
             data = io.imread(nazwa_pliku)
 
             cut_points, data = processing(data, "set{}/{}.png".format(set_nr, img_nr))
-            if len(cut_points) == 0:
-                print("DEBUG", cut_points)
-                display(data, False, False)
-                io.show()
-            # cut_points = artur(data)
+
             points_all.append(cut_points)
 
-            io.show()
+            #io.show()
         result, doubles = distance_comparator(points_all)
         result = preference_hacker(result, doubles)
 
-        print_debug(result)
-
-        sum_of_points = 0.
-        for i in range(len(correct)):
-            for j in range(len(result[i])):
-                if result[i][j] == correct[i]:
-                    sum_of_points += (1 / (1 + j))
-                    break
-        wypis = str(sum_of_points) + ' na ' + str(len(correct))
-        print(wypis)
-        wypis_na_koniec += wypis + '\n'
-    print(wypis_na_koniec)
+        print_result(result)
