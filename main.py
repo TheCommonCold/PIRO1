@@ -21,9 +21,9 @@ def display(img, line, points, name=""):
     if line:
         p0, p1 = line
         ax.plot((p0[0], p1[0]), (p0[1], p1[1]), markersize=10, linewidth=5)
-    if points:
+    if points.any():
         temp = np.array(points)
-        ax.plot(temp[:, 0], temp[:, 1], 'ro', markersize=5, linewidth=2)
+        ax.plot(temp[:, 1], temp[:, 0], 'ro', markersize=5, linewidth=2)
     ax.set_title(name)
     ploty.append(ax)
     io.imshow(img)
@@ -64,6 +64,8 @@ class Odcinek:
     def __init__(self, p1, p2, a1, a2):
         self.p1 = [int(x) for x in p1]
         self.p2 = [int(x) for x in p2]
+        self.p1[0], self.p1[1] = self.p1[1], self.p1[0]
+        self.p2[0], self.p2[1] = self.p2[1], self.p2[0]
         self.a1 = a1
         self.a2 = a2
         odl = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** (1 / 2)
@@ -85,11 +87,6 @@ def find_base_smart(img):
     angles = []
     for i in range(len(coords)):
         angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
-    new_coords = []
-    for i in range(len(coords)):
-        if not 160 <= angles[i] <= 200:
-            new_coords.append(coords[i])
-    coords = new_coords
     angles = []
     for i in range(len(coords)):
         angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
@@ -101,7 +98,9 @@ def find_base_smart(img):
     by_angles = sorted(odcinki, key=lambda x: x.delta_angles)
     by_length = sorted(odcinki, key=lambda x: -x.length)
 
-    return by_angles, by_length
+    by_angles = [[x.p1, x.p2] for x in by_angles]
+    by_length = [[x.p1, x.p2] for x in by_length]
+    return by_angles[0], by_length[0], coords
 
 
 def find_furthest_bottom(img):
@@ -375,8 +374,9 @@ def print_result(result):
 
 
 def processing(data, debug_name=""):
-    line = find_base(data)
-    find_base_smart(data)  # ta linia zamiast tej wyżej
+    #line = find_base(data)
+    line, _, coords = find_base_smart(data)
+    display(data, line, coords, debug_name)
     data = rotator(data, line)
     data = resizer(data)
     middle = [len(data[0]) // 2, find_furthest_bottom(data)]
@@ -390,7 +390,7 @@ def processing(data, debug_name=""):
 if __name__ == "__main__":
     how_many_in_folder = [6, 20, 20, 20, 20, 200, 200, 20, 100]
     wypis_na_koniec = ""
-    for set_nr in range(0, 9):
+    for set_nr in range(1, 2):
         f = open("set{}/correct.txt".format(set_nr), "r")
         correct = list(map(int, f.read().split('\n')[:-1]))
         points_all = []
@@ -411,7 +411,7 @@ if __name__ == "__main__":
 
         io.show()
         result, doubles = distance_comparator(points_all)
-        result = preference_hacker(result, doubles)
+        #result = preference_hacker(result, doubles)
         print_result(result)
         sum_of_points = 0.
         for i in range(len(correct)):
