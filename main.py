@@ -20,8 +20,8 @@ def display(img, line, points, name=""):
     ax = fig.add_subplot(1, 1, 1)
     if line:
         p0, p1 = line
-        ax.plot((p0[0], p1[0]), (p0[1], p1[1]), markersize=10, linewidth=5)
-    if points.any():
+        ax.plot((p0[1], p1[1]), (p0[0], p1[1]), markersize=10, linewidth=5)
+    if points:
         temp = np.array(points)
         ax.plot(temp[:, 1], temp[:, 0], 'ro', markersize=5, linewidth=2)
     ax.set_title(name)
@@ -60,6 +60,9 @@ def find_base(img):
     return base_line
 
 
+odl = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** (1 / 2)
+
+
 class Odcinek:
     def __init__(self, p1, p2, a1, a2):
         self.p1 = [int(x) for x in p1]
@@ -68,7 +71,6 @@ class Odcinek:
         self.p2[0], self.p2[1] = self.p2[1], self.p2[0]
         self.a1 = a1
         self.a2 = a2
-        odl = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** (1 / 2)
         self.length = odl(self.p1, self.p2)
         self.a = (p2[1] - p1[1]) / (p2[0] - p1[0])
         self.b = p1[1] - self.a * p1[0]
@@ -80,33 +82,69 @@ def get_angle(a, b, c):
     return ang + 360 if ang < 0 else ang
 
 
+class BorderingPoint:
+    def __init__(self, p, typ):
+        self.p = p
+        self.type = typ
+
+    def calc_dist(self, from_where):
+        self.dist = odl(self.p, from_where)
+
+
 # znajdywacz podstawy pierwsza metodą
 def find_base_smart(img):
+    [[top, bot], [left, right]] = find_bordering(img)
+    # bordering_points_flat=[bordering_points[0][0][0],bordering_points[0][0][1],bordering_points[0][1][0],bordering_points[0][1][1],bordering_points[1][0][0],bordering_points[1][0][1],bordering_points[1][1][0],bordering_points[1][1][1]]
+    bordering_points = []
+    for i in top:
+        bordering_points.append(BorderingPoint(i, "top"))
+    for i in bot:
+        bordering_points.append(BorderingPoint(i, "bot"))
+    for i in left:
+        bordering_points.append(BorderingPoint(i, "left"))
+    for i in right:
+        bordering_points.append(BorderingPoint(i, "right"))
     contours = find_contours(img, 0)
     coords = approximate_polygon(contours[0], tolerance=3)[:-1]
-    angles = []
-    for i in range(len(coords)):
-        angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
-    angles = []
-    for i in range(len(coords)):
-        angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
-    odcinki = []
-    for i in range(len(coords)):
-        odcinki.append(Odcinek(coords[i], coords[(i + 1) % len(coords)], angles[i], angles[(i + 1) % len(coords)]))
-    # for i in odcinki:
-    #     print(i.p1, i.p2, i.how_close_to_right_angles())
-    by_angles = sorted(odcinki, key=lambda x: x.delta_angles)
-    by_length = sorted(odcinki, key=lambda x: -x.length)
-
-    by_angles = [[x.p1, x.p2] for x in by_angles]
-    by_length = [[x.p1, x.p2] for x in by_length]
-    return by_angles[0], by_length[0], coords
-
+    coords = [[x[1], x[0]] for x in coords]
+    suma = [0, 0]
+    for i in coords:
+        suma[0] += i[0]
+        suma[1] += i[1]
+    suma[0] /= len(coords)
+    suma[1] /= len(coords)
+    for i in bordering_points:
+        i.calc_dist(suma)
+    bordering_points.sort(key=lambda x: -x.dist)
+    a = bordering_points[0]
+    b = bordering_points[1]
+    if bordering_points[0].type == bordering_points[1].type:
+        b = bordering_points[2]
+    # angles = []
+    # for i in range(len(coords)):
+    #     angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
+    # angles = []
+    # for i in range(len(coords)):
+    #     angles.append(get_angle(coords[(i - 1) % len(coords)], coords[i], coords[(i + 1) % len(coords)]))
+    # odcinki = []
+    # for i in range(len(coords)):
+    #     odcinki.append(Odcinek(coords[i], coords[(i + 1) % len(coords)], angles[i], angles[(i + 1) % len(coords)]))
+    # # for i in odcinki:
+    # #     print(i.p1, i.p2, i.how_close_to_right_angles())
+    # by_angles = sorted(odcinki, key=lambda x: x.delta_angles)
+    # by_length = sorted(odcinki, key=lambda x: -x.length)
+    #
+    # by_angles = [[x.p1, x.p2] for x in by_angles]
+    # by_length = [[x.p1, x.p2] for x in by_length]
+    # print(data.shape)
+    # return by_angles[0], by_length[0], coords
+    return [a.p,b.p], False, [x.p for x in bordering_points]
 
 def find_furthest_bottom(img):
-    for i in range(len(img) - 1, 0, -1):
-        if img[i][len(img[0]) // 2] > 0:
-            return i
+    for i in range(len(img) - 1, -1, -1):
+        for j in range(len(img[0])):
+            if img[i][j] > 0:
+                return i
     return -1
 
 
@@ -123,7 +161,7 @@ def find_furthest_left(img):
 
 
 def find_furthest_right(img):
-    for i in range(len(img[0]) - 1, 0, -1):
+    for i in range(len(img[0]) - 1, -1, -1):
         for j in range(len(img)):
             if img[j][i] > 0:
                 return i
@@ -136,6 +174,33 @@ def find_furthest_top(img):
             if img[j][i] > 0:
                 return j
     return -1
+
+
+def find_furthest(img):
+    top = find_furthest_top(img)
+    bot = find_furthest_bottom(img)
+    right = find_furthest_right(img)
+    left = find_furthest_left(img)
+    return [[top, bot], [left, right]]
+
+
+def find_bordering(img):
+    [[top, bot], [left, right]] = find_furthest(img)
+    tp = []
+    bp = []
+    lp = []
+    rp = []
+    for i in range(img.shape[1]):
+        if img[top][i] > 0:
+            tp.append([top, i])
+        if img[bot][i] > 0:
+            bp.append([bot, i])
+    for i in range(img.shape[0]):
+        if img[i][right] > 0:
+            rp.append([i, right])
+        if img[i][left] > 0:
+            lp.append([i, left])
+    return [[[tp[0], tp[-1]], [bp[0], bp[-1]]], [[lp[0], lp[-1]], [rp[0], rp[-1]]]]
 
 
 def resizer(img):
@@ -193,7 +258,6 @@ def rotator(img, points, perfect=False):
 
 def artur(data):
     line = find_base2(data)
-    # 10 pixeli nad podstawą
     line_h = line[0][1] - 10
     line = [0, 0]
     for i in range(data.shape[0]):
@@ -374,9 +438,9 @@ def print_result(result):
 
 
 def processing(data, debug_name=""):
-    #line = find_base(data)
-    line, _, coords = find_base_smart(data)
-    display(data, line, coords, debug_name)
+    # line = find_base(data)
+    line, _, points = find_base_smart(data)
+    display(data, line, points, debug_name)
     data = rotator(data, line)
     data = resizer(data)
     middle = [len(data[0]) // 2, find_furthest_bottom(data)]
@@ -396,7 +460,7 @@ if __name__ == "__main__":
         points_all = []
         checkpoint = []
         contours = []
-        for img_nr in range(how_many_in_folder[set_nr]):
+        for img_nr in range(10, how_many_in_folder[set_nr]):
             nazwa_pliku = "set{}/{}.png".format(set_nr, img_nr)
             print(nazwa_pliku)
             data = io.imread(nazwa_pliku)
@@ -406,12 +470,11 @@ if __name__ == "__main__":
                 print("DEBUG", cut_points)
                 display(data, False, False)
                 io.show()
-            # cut_points = artur(data)
             points_all.append(cut_points)
 
         io.show()
         result, doubles = distance_comparator(points_all)
-        #result = preference_hacker(result, doubles)
+        # result = preference_hacker(result, doubles)
         print_result(result)
         sum_of_points = 0.
         for i in range(len(correct)):
