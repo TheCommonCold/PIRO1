@@ -21,7 +21,7 @@ def display(img, line, points, name=""):
     if line:
         p0, p1 = line
         ax.plot((p0[0], p1[0]), (p0[1], p1[1]), markersize=10, linewidth=5)
-    if points.any():
+    if points:
         temp = np.array(points)
         ax.plot(temp[:, 1], temp[:, 0], 'ro', markersize=5, linewidth=2)
     ax.set_title(name)
@@ -374,9 +374,8 @@ def print_result(result):
 
 
 def processing(data, debug_name=""):
-    #line = find_base(data)
-    line, _, coords = find_base_smart(data)
-    display(data, line, coords, debug_name)
+    line = find_base2(data)
+    display(data, line, False, debug_name)
     data = rotator(data, line)
     data = resizer(data)
     middle = [len(data[0]) // 2, find_furthest_bottom(data)]
@@ -390,7 +389,7 @@ def processing(data, debug_name=""):
 if __name__ == "__main__":
     how_many_in_folder = [6, 20, 20, 20, 20, 200, 200, 20, 100]
     wypis_na_koniec = ""
-    for set_nr in range(1, 2):
+    for set_nr in range(6, 7):
         f = open("set{}/correct.txt".format(set_nr), "r")
         correct = list(map(int, f.read().split('\n')[:-1]))
         points_all = []
@@ -411,7 +410,7 @@ if __name__ == "__main__":
 
         io.show()
         result, doubles = distance_comparator(points_all)
-        #result = preference_hacker(result, doubles)
+        result = preference_hacker(result, doubles)
         print_result(result)
         sum_of_points = 0.
         for i in range(len(correct)):
