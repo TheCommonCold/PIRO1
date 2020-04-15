@@ -1,0 +1,6 @@
+name: stats
+dependencies:
+  - numpy
+  - pandas
+  - scikit-image
+  - matplotlib
